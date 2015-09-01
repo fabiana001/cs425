@@ -29,6 +29,9 @@ public class Server {
     Selector selector;
     HashMap<SocketChannel,String> dataMap = new HashMap<SocketChannel, String>();
 
+    Charset charset = Charset.forName("UTF-8");
+    CharsetEncoder encoder = charset.newEncoder();
+
 
     /**
      *
@@ -50,7 +53,8 @@ public class Server {
 
             // Register the server socket channel, indicating an interest in accepting new connections
             selector = Selector.open();
-            server.register(selector, ops, null);
+            server.register(selector, SelectionKey.OP_ACCEPT , null);
+
 
             System.out.println("Server is listening on: "
                     + server.socket().getInetAddress().getHostAddress() + ":"
@@ -70,12 +74,9 @@ public class Server {
 
                     if (key.isAcceptable()) {
                         accept(key);
-                    } else if (key.isWritable()) {
-                        //TODO implement this part
-
-                    } else if(key.isReadable()){
+                    }else if(key.isReadable()){
                         read(key);
-                    } else if(key.isWritable()){
+                    }else if(key.isWritable()){
                         write(key);
                     }
 
@@ -92,9 +93,23 @@ public class Server {
 
     private void write(SelectionKey key) throws IOException {
         String request = "Hi, I'm the server";
-        CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
-        SocketChannel clientChannel = (SocketChannel) key.channel();
-        clientChannel.write(encoder.encode(CharBuffer.wrap(request)));
+
+
+
+        SocketChannel client = (SocketChannel) key.channel();
+
+        client.write(encoder.encode(CharBuffer.wrap(request)));
+
+        /*ByteBuffer output = (ByteBuffer) key.attachment();
+        output.flip();
+        if (!output.hasRemaining()) {
+            output.rewind();
+        }
+
+        System.out.println("Output "+ new String(output.array(), Charset.forName("UTF-8") ));
+        client.write(output);*/
+        key.cancel();
+
     }
 
     /**
@@ -109,7 +124,10 @@ public class Server {
         clientChannel.configureBlocking(false);
 
         // Register the new SocketChannel with our Selector, indicating we'd like to be notified when there's data waiting to be read
-        clientChannel.register(selector, SelectionKey.OP_READ);
+        clientChannel.register(selector, SelectionKey.OP_WRITE);
+
+        SelectionKey key2 = clientChannel.register(selector, SelectionKey.OP_WRITE);
+        key2.attach(ByteBuffer.wrap("hello".getBytes()));
 
         //TODO sobstitute the println with Log4j
         System.out.println("Accepted connection from " + clientChannel);
@@ -130,20 +148,27 @@ public class Server {
             numRead = clientChannel.read(this.readBuffer);
         } catch (IOException e) {
             // The remote forcibly closed the connection, cancel the selection key and close the channel.
+            System.err.println("ERROR");
             key.cancel();
             clientChannel.close();
             return;
         }
 
-        if (numRead == -1) {
-            // Remote entity shut the socket down cleanly. Do the same from our end and cancel the channel.
-            key.channel().close();
-            key.cancel();
+        if (numRead> 0){
+            //ByteBuffer source = ByteBuffer.wrap("This is the string request from the client".getBytes());
+            //clientChannel.register(selector, SelectionKey.OP_WRITE);
+            SelectionKey key2 = clientChannel.register(selector, SelectionKey.OP_WRITE);
+            key2.attach(ByteBuffer.wrap("hello".getBytes()));
+
+        }
+        else if(numRead == -1) {
+
+            //key.channel().close();
+            //key.cancel();
 
 //            String request = "Hi, I'm the server";
 //            CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
 //            clientChannel.write(encoder.encode(CharBuffer.wrap(request)));
-
             return;
         }
 
@@ -167,4 +192,6 @@ public class Server {
         Server server = new Server(9999, 1000);
         server.run();
     }
+
+
 }
