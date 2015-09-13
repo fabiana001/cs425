@@ -3,6 +3,7 @@ package core;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.List;
@@ -29,8 +30,9 @@ public class Client {
 		result = new StringBuilder();
 		
 		for (String server : servers) {
+			Thread t;
 			ResultCollector collector = new ResultCollector(query, server, Server.SERVER_PORT);
-			collector.run();
+			t = new Thread(collector);
 		}
 		return result.toString();
 	}
@@ -63,7 +65,16 @@ public class Client {
 		public void run() {
 			try {
 				Socket serverConn = new Socket(this.server, this.port);
-				BufferedReader r = new BufferedReader(new InputStreamReader(serverConn.getInputStream()));
+				BufferedReader in = new BufferedReader(new InputStreamReader(serverConn.getInputStream()));
+				PrintWriter out = new PrintWriter(serverConn.getOutputStream());
+				
+				out.println(this.query);
+				out.flush();
+				out.close();
+				
+				String response = null;
+				
+				
 			} catch (UnknownHostException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();

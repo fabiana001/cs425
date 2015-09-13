@@ -20,7 +20,7 @@ import java.util.Set;
 public class Client {
 
 
-    public static void connect(String ip, int port) throws IOException {
+    public static void connect(String ip, int port, String request) throws IOException {
 
         Selector selector = SelectorProvider.provider().openSelector();
         //Selector selector = Selector.open();
@@ -29,20 +29,20 @@ public class Client {
         CharsetEncoder encoder = charset.newEncoder();
 
 
-        ByteBuffer buffer = ByteBuffer.allocateDirect(1024);
-        CharBuffer charBuffer = CharBuffer.allocate(1024);
-        int wait_time = 10000;
+        ByteBuffer buffer = ByteBuffer.allocateDirect(256);
+        CharBuffer charBuffer = CharBuffer.allocate(256);
+        int wait_time = 5000;
 
         SocketChannel client = SocketChannel.open();
         client.configureBlocking(false);
         client.connect(new InetSocketAddress(ip, port));
         client.register(selector, SelectionKey.OP_CONNECT, null);
 
-        // while (selector.select(wait_time) > 0) {
-        while (true) {
-            System.out.println("listening for keys");
+        while (selector.select(wait_time) > 0) {
+        //while (true) {
+            //System.out.println("listening for keys");
             int numKeys = selector.select();
-            System.out.println("Number of selected keys: " + numKeys);
+            //System.out.println("Number of selected keys: " + numKeys);
 
             Set readyKeys = selector.selectedKeys();
             Iterator readyItor = readyKeys.iterator();
@@ -57,17 +57,16 @@ public class Client {
                     if (keyChannel.isConnectionPending()) {
                         keyChannel.finishConnect();
                     }
-                    //send a message to the server
-                    String request = "This is the string request from the client";
+                    
+                    //send the request to the server
                     keyChannel.write(encoder.encode(CharBuffer.wrap(request)));
-                    //client.register(selector, SelectionKey.OP_READ);
-                    //key.interestOps(SelectionKey.OP_READ);
+                    
+                    // set the client to read responses from the server
                     SelectionKey key2 = client.register(selector, SelectionKey.OP_READ);
                     key2.attach(ByteBuffer.wrap("hello".getBytes()));
 
                 } else if (key.isReadable()) {
-                    System.out.println("hello");
-
+                    //System.out.println("reading response from server...");
                     SocketChannel socketChannel = (SocketChannel) key.channel();
 
                     // Clear out our read buffer so it's ready for new data
@@ -86,12 +85,23 @@ public class Client {
                     }
 
                     if (numRead == -1) {
-                        // Remote entity shut the socket down cleanly. Do the
+                    	
+                    	System.out.println("Shutting down the channel...");
+                    	// Remote entity shut the socket down cleanly. Do the
                         // same from our end and cancel the channel.
                         key.channel().close();
                         key.cancel();
-
                     }
+                    
+                    // print out the response from the server
+                	buffer.rewind();
+                	//System.out.print("RESPONSE: ");
+                	while (buffer.hasRemaining())
+                		System.out.print((char)buffer.get());
+                	System.out.println();
+                	
+                	// Clear out our read buffer so it's ready for new data
+                    buffer.clear();
 
                 } else if (key.isWritable()) {
                     System.err.println("Unknown key");
@@ -102,16 +112,20 @@ public class Client {
         }
 
         //client.close();
-        //System.out.println("Connection with server closed");
+        System.out.println("Connection with server closed");
     }
 
     public static void main(String[] args) {
-        try {
-            Client.connect("127.0.0.1", 9999);
-            Client.connect("127.0.0.1", 9999);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    	
+    	int []servers = {9999, 8888};
+    	
+    	for (int server : servers) {
+    		try {
+    			Client.connect("127.0.0.1", server, "\" 8 \"");
+    		} catch (IOException e) {
+    			e.printStackTrace();
+    		}
+    	}
     }
 
 }

@@ -1,6 +1,8 @@
 package server;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -20,9 +22,14 @@ import java.util.Set;
  * Created by fabiana on 8/31/15.
  * It is implemented with ServerSocketChannel and Selector to allow asynchronous operations
  */
-public class Server {
+
+//TODO sobstitute the println with Log4j
+
+public class Server implements Runnable{
     //socket port
     private int port;
+    private String server_ip = "127.0.0.1";
+    private String logfile;
 
     ByteBuffer readBuffer;
     ServerSocketChannel server;
@@ -37,10 +44,12 @@ public class Server {
      *
      * @param port socket port
      * @param bufferCapacity buffer's capacity, in bytes
+     * @param the logfile to grep from for answering queries
      */
-    public Server(int port, int bufferCapacity){
+    public Server(int port, int bufferCapacity, String logfile){
         this.port = port;
         readBuffer = ByteBuffer.allocate(bufferCapacity);
+        this.logfile = logfile;
     }
 
     public void run(){
@@ -48,7 +57,7 @@ public class Server {
         try {
             server = ServerSocketChannel.open();
             server.configureBlocking(false);
-            server.socket().bind(new InetSocketAddress("127.0.0.1",port));
+            server.socket().bind(new InetSocketAddress(server_ip, port));
             int ops = server.validOps();
 
             // Register the server socket channel, indicating an interest in accepting new connections
@@ -62,9 +71,6 @@ public class Server {
             // Iterate over the set of keys for which events are available
             while (true) {
                 int numKeys = selector.select();
-                System.out.println("Number of selected keys: " + numKeys);
-
-
                 Set readyKeys = selector.selectedKeys();
                 Iterator iterator = readyKeys.iterator();
 
@@ -85,31 +91,42 @@ public class Server {
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-
-
-
     }
 
     private void write(SelectionKey key) throws IOException {
-        String request = "Hi, I'm the server";
-
-
+    	System.out.println("writing to client...");
+    	
+        StringBuilder response = new StringBuilder();
+        response.append("Server " + server_ip + ":" + port + "\n");
 
         SocketChannel client = (SocketChannel) key.channel();
-
-        client.write(encoder.encode(CharBuffer.wrap(request)));
-
-        /*ByteBuffer output = (ByteBuffer) key.attachment();
-        output.flip();
-        if (!output.hasRemaining()) {
-            output.rewind();
+        String request = dataMap.get(client);
+        
+        String []cmds = {"/bin/sh", "-c", "cat /home/vbry/coding/school/cs425/logs/" + this.logfile + " | grep " + request};
+        
+        try {
+        	Process child = Runtime.getRuntime().exec(cmds);
+        	// wait for the process to finish executing (blocking operation - might need to run in a new thread)
+        	child.waitFor();
+        	
+        	// read the result
+        	BufferedReader command_response = new BufferedReader(new InputStreamReader(child.getInputStream()));
+        	String line = "";
+        	while ((line = command_response.readLine()) != null) {
+        		response.append(line + "\n");
+        	}
+        }
+        
+        catch (Exception e) {
+        	System.out.println("Error when reading stream from process...");
+        	e.printStackTrace();
         }
 
-        System.out.println("Output "+ new String(output.array(), Charset.forName("UTF-8") ));
-        client.write(output);*/
-        key.cancel();
-
+        finally {
+        	// send the result to the client
+        	client.write(encoder.encode(CharBuffer.wrap(response.toString())));
+        	key.cancel();
+        }
     }
 
     /**
@@ -124,12 +141,8 @@ public class Server {
         clientChannel.configureBlocking(false);
 
         // Register the new SocketChannel with our Selector, indicating we'd like to be notified when there's data waiting to be read
-        clientChannel.register(selector, SelectionKey.OP_WRITE);
+        clientChannel.register(selector, SelectionKey.OP_READ);
 
-        SelectionKey key2 = clientChannel.register(selector, SelectionKey.OP_WRITE);
-        key2.attach(ByteBuffer.wrap("hello".getBytes()));
-
-        //TODO sobstitute the println with Log4j
         System.out.println("Accepted connection from " + clientChannel);
     }
 
@@ -155,24 +168,23 @@ public class Server {
         }
 
         if (numRead> 0){
-            //ByteBuffer source = ByteBuffer.wrap("This is the string request from the client".getBytes());
-            //clientChannel.register(selector, SelectionKey.OP_WRITE);
             SelectionKey key2 = clientChannel.register(selector, SelectionKey.OP_WRITE);
-            key2.attach(ByteBuffer.wrap("hello".getBytes()));
-
+            key2.attach(this.readBuffer);
         }
+        
         else if(numRead == -1) {
 
-            //key.channel().close();
-            //key.cancel();
+        	// print out the response from the server
+        	this.readBuffer.rewind();
+        	System.out.println("REQUEST: ");
+        	while (this.readBuffer.hasRemaining())
+        		System.out.print(this.readBuffer.getChar());
+        	System.out.println();
 
-//            String request = "Hi, I'm the server";
-//            CharsetEncoder encoder = Charset.forName("UTF-8").newEncoder();
-//            clientChannel.write(encoder.encode(CharBuffer.wrap(request)));
             return;
         }
 
-        // Hand the data off to our worker thread
+        // save the data so that each request is associated with the correct client
         saveData(clientChannel, this.readBuffer.array(), numRead);
         readBuffer.clear();
     }
@@ -185,12 +197,17 @@ public class Server {
         //TODO trasform the print operation in a operation to store data
         String string = new String(dataCopy,charset);
         dataMap.put(socketchannel,string);
-        System.out.println(string);
+        System.out.println("Request: " + string);
     }
 
     public static void main(String[] args) {
-        Server server = new Server(9999, 1000);
-        server.run();
+        Server s1 = new Server(9999, 48, "short-log-0.txt");
+        Thread t1 = new Thread(s1);
+        t1.start();
+        
+        Server s2 = new Server(8888, 48, "short-log-1.txt");
+        Thread t2 = new Thread(s2);
+        t2.start();
     }
 
 
