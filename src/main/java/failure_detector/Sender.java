@@ -9,37 +9,44 @@ import java.net.UnknownHostException;
 
 /**
  * This is the client class of the Servent.
- * It is responsible for sending periodic heartbeats to the masters of this node 
- * and broadcasting any failures it detects.
+ * It handles the sending of messages to other processes.
  * @author vbry
  *
  */
+
+// TODO: implement a queue to store messages that need to be sent and put the thread to sleep if the queue is empty
 public class Sender implements Runnable {
 
-	private int port;
+	private String ip;
+	private int serverPort;
 	private DatagramSocket clientSocket;
 	private DatagramPacket sendPacket;
 	private byte[] sendData = new byte[64];
-	private Servent node;
 	
-	public Sender(int port, Servent node) {
-		this.port = port;
-		this.node = node;
+	
+	public Sender(String ip, int serverPort) {
+		this.ip = ip;
+		this.serverPort = serverPort;
 	}
 	
 	public void run() {
 		try {
 			clientSocket = new DatagramSocket();
-			
-			// send heartbeats to this node's masters
-			for (String master : node.masters) {
-				String []info = master.split(":");
-				String timestamp = Long.toString(System.currentTimeMillis());
-				sendData = ("H|" + node.ip + "|" + timestamp).getBytes();
-				InetAddress address = InetAddress.getByName(info[0]);
-				sendPacket = new DatagramPacket(sendData, sendData.length, address, Integer.valueOf(info[1]));
-				clientSocket.send(sendPacket);
-			}
+		} catch (SocketException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
+	public void sendMessage(String message, String address) {
+		try {
+			sendData = message.getBytes();
+			InetAddress addr = InetAddress.getByName(address);
+			sendPacket = new DatagramPacket(sendData, sendData.length, addr, this.serverPort);
+			clientSocket.send(sendPacket);
 		} catch (SocketException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -51,6 +58,4 @@ public class Sender implements Runnable {
 			e.printStackTrace();
 		}
 	}
-
-	
 }

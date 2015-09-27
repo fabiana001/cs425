@@ -6,8 +6,12 @@ import java.net.DatagramSocket;
 import java.net.SocketException;
 
 /**
- * @brief The server class of the servent, it listens for new additions to the membership 
- * list of the cluster and for messages informing about failures
+ * @brief The server class of the servent.
+ * It listens for -
+ * 		'Join' messages indicating new nodes added to the cluster
+ * 		'Ack' messages indicating whether nodes are alive or potentially dead
+ * 		'Ping' messages from other processes to respond with an Ack
+ * 		'Ping request' messages to request Acks from a specified process and relay them back
  * @author vbry
  *
  */
@@ -38,24 +42,29 @@ public class Receiver implements Runnable {
 				String msgType = contents[0];
 				String nodeIp = contents[1];
 				//String port = contents[2];
-				Long timestamp = Long.valueOf(contents[2]);
+				//Long timestamp = Long.valueOf(contents[2]);
 				
-				// process a heartbeat event
-				if (msgType.equals("H")) {
-					System.out.println("received a heartbeat: " + timestamp.longValue() + " from: " + nodeIp);
-					node.servants.put(nodeIp, Long.valueOf(timestamp));
+				// process a ping event
+				if (msgType.equals("P")) {
+					System.out.println("received a ping from: " + nodeIp);
 				}
 				
-				// process a failure event
-				if (msgType.equals("F")) {
-					System.out.println("received a failure: " + timestamp.longValue() + " about: " + nodeIp);
+				// process an ack event
+				if (msgType.equals("A")) {
+					System.out.println("received an ack from: " + nodeIp);
 					
 				}
 				
+				// process a ping request event
+				if (msgType.equals("R")) {
+					String toPingIp = contents[2];
+					System.out.println("received a ping request from: " + nodeIp + " for: " + toPingIp);
+				}
+				
 				// process a new member join event
-				if (msgType.equals("N")) {
-					System.out.println("received a new member: " + timestamp.longValue() + " at: " + nodeIp);
-					node.members.add(nodeIp);
+				if (msgType.equals("J")) {
+					System.out.println("a new member has joined at: " + nodeIp);
+					node.members.add(new NodeStatus(nodeIp, Status.ALIVE));
 				}
 			}
 		} catch (SocketException e) {
